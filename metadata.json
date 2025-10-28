@@ -1,0 +1,7 @@
+{
+  "name": "AI Poster Generator",
+  "description": "Upload a photo and provide a text prompt to transform your image into a unique, AI-generated poster using Gemini.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
