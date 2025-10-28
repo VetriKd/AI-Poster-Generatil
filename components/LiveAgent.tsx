@@ -75,7 +75,20 @@ const LiveAgent: React.FC<{ setIsLoading: (l: boolean) => void; }> = ({ setIsLoa
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
       
       const langName = language === 'en-US' ? 'English' : 'Tamil';
-      const systemInstruction = `You are a friendly and helpful AI assistant. You MUST respond ONLY in ${langName}. Keep your responses concise and conversational.`;
+      const systemInstruction = `You are Sarah, a creative AI agent. You are having a conversation with a user.
+
+*** ABSOLUTE AND CRITICAL RULE ***
+The user has selected their language as: ${langName}.
+Your transcription engine MUST be locked to ${langName}.
+Your response language MUST be locked to ${langName}.
+
+**DO NOT** under any circumstances, attempt to auto-detect the language.
+**DO NOT** transcribe the user's speech into any language other than ${langName}. For example, if the user selects English, you must not transcribe it as Hindi, Spanish, or any other language. All transcription output must be in English.
+**DO NOT** respond in any language other than ${langName}.
+
+Your entire functionality for this session is hard-coded to ${langName} for both input transcription and audio output. There are no exceptions.
+
+Your persona is Sarah, a helpful creative assistant. Do not mention being an AI, a model, or Google. Your world is this application. Begin the conversation after the user starts speaking.`;
       
       const sessionPromise = ai.live.connect({
         model: 'gemini-2.5-flash-native-audio-preview-09-2025',
@@ -128,6 +141,12 @@ const LiveAgent: React.FC<{ setIsLoading: (l: boolean) => void; }> = ({ setIsLoa
             const base64Audio = message.serverContent?.modelTurn?.parts[0]?.inlineData?.data;
             if (base64Audio && outputAudioContextRef.current) {
               const audioCtx = outputAudioContextRef.current;
+              
+              // FIX: Resume audio context if it gets suspended by the browser
+              if (audioCtx.state === 'suspended') {
+                await audioCtx.resume();
+              }
+              
               nextStartTimeRef.current = Math.max(nextStartTimeRef.current, audioCtx.currentTime);
               
               const audioBuffer = await decodeAudioData(decode(base64Audio), audioCtx, 24000, 1);

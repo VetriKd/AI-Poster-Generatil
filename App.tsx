@@ -1,51 +1,63 @@
 import React, { useState } from 'react';
 import Header from './components/Header';
-import Loader from './components/Loader';
 import Tabs from './components/Tabs';
 import PosterStudio from './components/PosterStudio';
 import ImagenGenerator from './components/ImagenGenerator';
-import LiveAgent from './components/LiveAgent';
-import ImageAnalyzer from './components/ImageAnalyzer';
-import AudioTranscriber from './components/AudioTranscriber';
+import Loader from './components/Loader';
 import DesignReplicator from './components/DesignReplicator';
+import BrandKitSetup from './components/BrandKitSetup';
 
-export type TabValue = 'poster' | 'imagen' | 'live' | 'analyze' | 'transcribe' | 'replicate';
+const TABS = ['Poster Studio', 'Imagen Generator', 'Design Replicator'];
 
-const App: React.FC = () => {
-  const [isLoading, setIsLoading] = useState<boolean>(false);
-  const [activeTab, setActiveTab] = useState<TabValue>('poster');
-  
-  const renderContent = () => {
-    switch(activeTab) {
-      case 'poster':
-        return <PosterStudio setIsLoading={setIsLoading} />;
-      case 'imagen':
+export interface BrandKitData {
+  logoFile: File | null;
+  contactNumber: string;
+  socialMedia: string;
+}
+
+function App() {
+  const [activeTab, setActiveTab] = useState(TABS[0]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isBrandKitOpen, setIsBrandKitOpen] = useState(false);
+  const [brandKit, setBrandKit] = useState<BrandKitData | null>(null);
+
+  const renderActiveTab = () => {
+    switch (activeTab) {
+      case 'Poster Studio':
+        return <PosterStudio setIsLoading={setIsLoading} brandKit={brandKit} />;
+      case 'Imagen Generator':
         return <ImagenGenerator setIsLoading={setIsLoading} />;
-      case 'live':
-        return <LiveAgent setIsLoading={setIsLoading} />;
-      case 'analyze':
-        return <ImageAnalyzer setIsLoading={setIsLoading} />;
-      case 'transcribe':
-        return <AudioTranscriber setIsLoading={setIsLoading} />;
-      case 'replicate':
+      case 'Design Replicator':
         return <DesignReplicator setIsLoading={setIsLoading} />;
       default:
-        return <PosterStudio setIsLoading={setIsLoading} />;
+        return null;
     }
-  }
+  };
+
+  const handleSaveBrandKit = (data: BrandKitData) => {
+    setBrandKit(data);
+    setIsBrandKitOpen(false);
+  };
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white font-sans antialiased">
+    <div className="bg-gray-900 text-white min-h-screen font-sans">
       {isLoading && <Loader />}
-      <Header />
-      <main className="container mx-auto px-4 py-8">
-        <div className="max-w-4xl mx-auto space-y-8">
-          <Tabs activeTab={activeTab} setActiveTab={setActiveTab} />
-          {renderContent()}
+      {isBrandKitOpen && (
+        <BrandKitSetup 
+          onClose={() => setIsBrandKitOpen(false)} 
+          onSave={handleSaveBrandKit}
+          currentBrandKit={brandKit}
+        />
+      )}
+      <Header onSetupBrandKit={() => setIsBrandKitOpen(true)} />
+      <main className="container mx-auto px-4 pb-16">
+        <Tabs tabs={TABS} activeTab={activeTab} setActiveTab={setActiveTab} />
+        <div className="mt-8">
+          {renderActiveTab()}
         </div>
       </main>
     </div>
   );
-};
+}
 
 export default App;

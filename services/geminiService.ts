@@ -1,60 +1,51 @@
 import { GoogleGenAI, Modality } from "@google/genai";
+import { BrandKitData } from "../App";
 
-// Initialize the GoogleGenAI client
+// FIX: Initialize GoogleGenAI client
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
+// Helper to convert File to a base64 generative part
 const fileToGenerativePart = async (file: File) => {
   const base64EncodedDataPromise = new Promise<string>((resolve) => {
     const reader = new FileReader();
-    reader.onloadend = () => resolve((reader.result as string).split(',')[1]);
+    reader.onloadend = () => {
+      if (typeof reader.result === 'string') {
+        resolve(reader.result.split(',')[1]);
+      } else {
+        resolve('');
+      }
+    };
     reader.readAsDataURL(file);
   });
   return {
-    inlineData: {
-      data: await base64EncodedDataPromise,
-      mimeType: file.type,
-    },
+    inlineData: { data: await base64EncodedDataPromise, mimeType: file.type },
   };
 };
 
-// Function to generate a poster by either creating a new image or editing an existing one
-export const generatePoster = async (prompt: string, imageFile?: File | null): Promise<string> => {
-  const model = 'gemini-2.5-flash-image';
-  
-  const parts: any[] = [{ text: prompt }];
-
-  if (imageFile) {
+// For PosterStudio
+export const generatePoster = async (imageFile: File, prompt: string, brandKit: BrandKitData | null) => {
     const imagePart = await fileToGenerativePart(imageFile);
-    parts.unshift(imagePart); // For editing, image should come first
-  }
+    let fullPrompt = `Create a promotional poster using the provided image as the main visual element. The theme of the poster is: "${prompt}".`;
 
-  const response = await ai.models.generateContent({
-    model,
-    contents: { parts },
-    config: {
-      responseModalities: [Modality.IMAGE],
-    },
-  });
-
-  for (const part of response.candidates[0].content.parts) {
-    if (part.inlineData) {
-      const base64ImageBytes: string = part.inlineData.data;
-      return `data:image/png;base64,${base64ImageBytes}`;
+    if (brandKit) {
+        if (brandKit.logoFile) {
+            fullPrompt += ` Incorporate a space for a brand logo, typically in a corner or at the bottom.`;
+        }
+        if (brandKit.contactNumber) {
+            fullPrompt += ` Include the contact number "${brandKit.contactNumber}" in a readable font.`;
+        }
+        if (brandKit.socialMedia) {
+            fullPrompt += ` Include the social media handle "${brandKit.socialMedia}" near the contact information.`;
+        }
     }
-  }
-
-  throw new Error("No image was generated.");
-};
-
-// Function to replicate the design of a reference image with new content
-export const replicateDesign = async (referenceImageFile: File, newContentPrompt: string): Promise<string> => {
-    const model = 'gemini-2.5-flash-image';
-    const imagePart = await fileToGenerativePart(referenceImageFile);
-    const textPrompt = `Analyze the provided image's style, layout, color palette, and overall aesthetic. Replicate that design to create a new image. However, replace the original subject and text with the following new content: "${newContentPrompt}". The goal is a new poster that looks like it was designed by the same artist as the original, but for this new purpose.`;
+    
+    fullPrompt += ` The output must be a high-quality poster image. Do not just return the original image.`;
 
     const response = await ai.models.generateContent({
-        model,
-        contents: { parts: [imagePart, { text: textPrompt }] },
+        model: 'gemini-2.5-flash-image',
+        contents: {
+            parts: [imagePart, { text: fullPrompt }],
+        },
         config: {
             responseModalities: [Modality.IMAGE],
         },
@@ -62,60 +53,52 @@ export const replicateDesign = async (referenceImageFile: File, newContentPrompt
 
     for (const part of response.candidates[0].content.parts) {
         if (part.inlineData) {
-            return `data:image/png;base64,${part.inlineData.data}`;
+            const base64ImageBytes: string = part.inlineData.data;
+            return `data:${part.inlineData.mimeType};base64,${base64ImageBytes}`;
         }
     }
-
-    throw new Error("No image was generated for the design replication.");
+    throw new Error('No poster image was generated.');
 };
 
-
-// Function to generate an image with Imagen
-export const generateWithImagen = async (prompt: string, aspectRatio: string): Promise<string> => {
+// For ImagenGenerator
+export const generateWithImagen = async (prompt: string, aspectRatio: string) => {
     const response = await ai.models.generateImages({
         model: 'imagen-4.0-generate-001',
         prompt: prompt,
         config: {
-          numberOfImages: 1,
-          outputMimeType: 'image/jpeg',
-          aspectRatio: aspectRatio as "1:1" | "3:4" | "4:3" | "9:16" | "16:9",
+            numberOfImages: 1,
+            outputMimeType: 'image/png',
+            aspectRatio: aspectRatio,
         },
     });
 
     const base64ImageBytes: string = response.generatedImages[0].image.imageBytes;
-    return `data:image/jpeg;base64,${base64ImageBytes}`;
+    return `data:image/png;base64,${base64ImageBytes}`;
 };
 
-// Function to suggest a prompt for image generation
-export const suggestPrompt = async (): Promise<string> => {
-    const prompt = "Suggest a creative and visually interesting prompt for an AI image generator. The prompt should be short, just the prompt itself, without any introductory text.";
+export const suggestPrompt = async () => {
     const response = await ai.models.generateContent({
         model: 'gemini-2.5-flash',
-        contents: prompt,
+        contents: 'Suggest a creative and visually interesting prompt for an AI image generator. The prompt should be short, just one sentence, and highly descriptive.',
     });
-    return response.text.trim().replace(/^"|"$/g, ''); // Clean up quotes
+    return response.text.trim();
 };
 
-// Function to analyze an image and return a description
-export const analyzeImage = async (imageFile: File): Promise<string> => {
-    const model = 'gemini-2.5-flash';
-    const imagePart = await fileToGenerativePart(imageFile);
-    const promptPart = { text: "Describe this image in detail." };
-
+// For ImageAnalyzer
+export const analyzeImage = async (file: File) => {
+    const imagePart = await fileToGenerativePart(file);
     const response = await ai.models.generateContent({
-        model,
-        contents: { parts: [imagePart, promptPart] },
+        model: 'gemini-2.5-flash',
+        contents: { parts: [imagePart, { text: "Describe this image in detail, covering the main subject, setting, colors, and mood." }] },
     });
-
     return response.text;
 };
 
-// Function to generate speech from text (TTS)
-export const generateSpeech = async (text: string): Promise<{ audioData: string, mimeType: string }> => {
-    const model = 'gemini-2.5-flash-preview-tts';
+// For ImageAnalyzer & AudioTranscriber
+export const generateSpeech = async (text: string) => {
     const response = await ai.models.generateContent({
-        model,
-        contents: [{ parts: [{ text }] }],
+        model: "gemini-2.5-flash-preview-tts",
+        contents: [{ parts: [{ text: `Say cheerfully: ${text}` }] }],
         config: {
             responseModalities: [Modality.AUDIO],
             speechConfig: {
@@ -125,29 +108,47 @@ export const generateSpeech = async (text: string): Promise<{ audioData: string,
             },
         },
     });
-    
-    const part = response.candidates?.[0]?.content?.parts?.[0];
-    if (part?.inlineData) {
+
+    const audioPart = response.candidates?.[0]?.content?.parts?.[0];
+    if (audioPart && audioPart.inlineData) {
         return {
-            audioData: part.inlineData.data,
-            mimeType: part.inlineData.mimeType
+            audioData: audioPart.inlineData.data,
+            mimeType: audioPart.inlineData.mimeType,
         };
     }
-
-    throw new Error("Failed to generate audio.");
+    throw new Error('Failed to generate speech.');
 };
 
+// For AudioTranscriber
+export const transcribeAudio = async (file: File) => {
+    const audioPart = await fileToGenerativePart(file);
+    const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash-native-audio-preview-09-2025',
+        contents: { parts: [audioPart, {text: "Transcribe the following audio."}] },
+    });
+    return response.text;
+};
 
-// Function to transcribe audio to text
-export const transcribeAudio = async (audioFile: File): Promise<string> => {
-    const model = 'gemini-2.5-flash';
-    const audioPart = await fileToGenerativePart(audioFile);
-    const promptPart = { text: "Transcribe this audio." };
+// For DesignReplicator
+export const replicateDesign = async (referenceFile: File, prompt: string) => {
+    const imagePart = await fileToGenerativePart(referenceFile);
+    const fullPrompt = `Replicate the style, layout, color palette, and overall design of the provided reference image. However, replace the main subject or content with the following new subject: "${prompt}". The new generated image should look like it's part of the same design family as the reference image.`;
     
     const response = await ai.models.generateContent({
-        model,
-        contents: { parts: [audioPart, promptPart] },
+        model: 'gemini-2.5-flash-image',
+        contents: {
+            parts: [imagePart, { text: fullPrompt }],
+        },
+        config: {
+            responseModalities: [Modality.IMAGE],
+        },
     });
-    
-    return response.text;
+
+    for (const part of response.candidates[0].content.parts) {
+        if (part.inlineData) {
+            const base64ImageBytes: string = part.inlineData.data;
+            return `data:${part.inlineData.mimeType};base64,${base64ImageBytes}`;
+        }
+    }
+    throw new Error('No image was generated for design replication.');
 };
